@@ -16,7 +16,7 @@ content-type: application/json
 GET http://localhost:9090/social-media/users
 
 ### Get a specific user
-GET http://localhost:9090/social-media/users/1
+GET http://localhost:9090/social-media/users/2
 
 ### Get posts
 GET http://localhost:9090/social-media/users/3/posts
