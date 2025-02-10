@@ -35,7 +35,17 @@ type UserNotFound record {|
     ErrorDetails body;
 |};
 
-mysql:Client socialMediaDb = check new("localhost", "root", "1234", "social_media_database", 3306);
+type DatabaseConfig record {|
+    string host;
+    string user;
+    string password;
+    string database;
+    int port;
+|};
+
+configurable DatabaseConfig databaseConfig = ?;
+
+mysql:Client socialMediaDb = check new(...databaseConfig);
 
 service /social\-media on new http:Listener(9090) {
 
