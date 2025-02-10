@@ -8,6 +8,12 @@ type User record {|
     string mobileNumber;
 |};
 
+type NewUser record {|
+    string name;
+    time:Date birthDate;
+    string mobileNumber;
+|};
+
 table<User> key(id) users = table [
     {id:1, name:"Joe", birthDate: {year:1990, month:2, day:3}, mobileNumber:"0718923456"}
 ];
@@ -44,6 +50,11 @@ service /social\-media on new http:Listener(9090) {
             return userNotFound;
         }
         return user;
+    }
+
+    resource function post users(NewUser newUser) returns http:Created|error {
+        users.add({id: users.length() + 1, ...newUser});
+        return http:CREATED;
     }
 }
 
