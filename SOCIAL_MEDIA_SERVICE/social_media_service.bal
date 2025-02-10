@@ -35,17 +35,19 @@ type UserNotFound record {|
     ErrorDetails body;
 |};
 
-mysql:Client socialMediaDb = check new("localhost", "username", "password", "social_media_database", 3306);
+mysql:Client socialMediaDb = check new("localhost", "root", "1234", "social_media_database", 3306);
 
 service /social\-media on new http:Listener(9090) {
 
     // social-media/users
 
+    // get users
     resource function get users() returns User[]|error{
         stream<User, sql:Error?> userStream = socialMediaDb->query(`SELECT * FROM users`);
         return from var user in userStream select user;
     }
 
+    // get a user
     resource function get users/[int id]() returns User|UserNotFound|error {
         User|sql:Error user = socialMediaDb->queryRow(`SELECT * FROM users WHERE id = ${id}`);
         if user is sql:NoRowsError {
@@ -61,6 +63,7 @@ service /social\-media on new http:Listener(9090) {
         return user;
     }
 
+    // create a user
     resource function post users(NewUser newUser) returns http:Created|error {
         transaction {
             _ = check socialMediaDb->execute(`
@@ -74,7 +77,7 @@ service /social\-media on new http:Listener(9090) {
             if true {
                  check commit;
             } else {
-                rollback;
+                // rollback;
             }
         }
         return http:CREATED;
