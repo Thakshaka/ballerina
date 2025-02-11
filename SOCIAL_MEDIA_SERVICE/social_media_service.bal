@@ -7,6 +7,7 @@ import ballerina/lang.regexp;
 // import ballerinax/slack;
 // import balguides/sentiment.analysis;
 import ballerina/constraint;
+import ballerina/log;
 
 type User record {|
     readonly int id;
@@ -173,34 +174,38 @@ service /social\-media on new http:Listener(9090) {
     }
 
     resource function post users/[int id]/posts(NewPost newPost) returns http:Created|UserNotFound|PostForbidden|error {
-        User|error user = socialMediaDb->queryRow(`SELECT * FROM users WHERE id = ${id}`);
-        if user is sql:NoRowsError {
-            ErrorDetails errorDetails = buildErrorPayload(string `id: ${id}`, string `users/${id}/posts`);
-            UserNotFound userNotFound = {
-                body: errorDetails
-            };
-            return userNotFound;
-        }
-        if user is error {
-            return user;
-        }
+        do {
+            _ = check socialMediaDb->queryRow(`SELECT * FROM users WHERE id = ${id}`, returnType = User);
 
-        // analysis:Sentiment sentiment = check sentimentAnalysisClient->/api/sentiment.post({text: newPost.description});
-        Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
-        if sentiment.label == "neg" {
-            PostForbidden postForbidden = { body: {message: string `id: ${id}`, details: string `users/${id}/posts`, timeStamp: time:utcNow()}};
-            return postForbidden;
-        }
-        
-        _ = check socialMediaDb->execute(`
-            INSERT INTO posts(description, category, created_date, tags, user_id)
-            VALUES (${newPost.description}, ${newPost.category}, CURDATE(), ${newPost.tags}, ${id});`);
+            // analysis:Sentiment sentiment = check sentimentAnalysisClient->/api/sentiment.post({text: newPost.description});
+            Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
+            if sentiment.label == "neg" {
+                PostForbidden postForbidden = { body: {message: string `id: ${id}`, details: string `users/${id}/posts`, timeStamp: time:utcNow()}};
+                return postForbidden;
+            }
+            
+            _ = check socialMediaDb->execute(`
+                INSERT INTO posts(description, category, created_date, tags, user_id)
+                VALUES (${newPost.description}, ${newPost.category}, CURDATE(), ${newPost.tags}, ${id});`);
 
-        // _  = check slackClient->/chat\.postMessage.post({
-        //     channel: slackConfig.channelName,
-        //     text: string `User ${user.name} has a new post.`
-        //   });
-        return http:CREATED;
+            // _  = check slackClient->/chat\.postMessage.post({
+            //     channel: slackConfig.channelName,
+            //     text: string `User ${user.name} has a new post.`
+            //   });
+            return http:CREATED;
+        } on fail var user {
+            if user is sql:NoRowsError {
+                ErrorDetails errorDetails = buildErrorPayload(string `id: ${id}`, string `users/${id}/posts`);
+                UserNotFound userNotFound = {
+                    body: errorDetails
+                };
+                return userNotFound;
+            }
+            if user is error {
+                log:printError("Some error", 'error = user);
+                return user;
+            }
+        }
     }
 }
 
