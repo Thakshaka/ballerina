@@ -4,7 +4,8 @@ import ballerina/time;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
 import ballerina/lang.regexp;
-import ballerinax/slack;
+// import ballerinax/slack;
+import balguides/sentiment.analysis;
 
 type User record {|
     readonly int id;
@@ -61,24 +62,28 @@ final mysql:Client socialMediaDb = check initSocialMediaDb();
 
 function initSocialMediaDb() returns mysql:Client|error => check new(...databaseConfig);
 
-configurable http:RetryConfig retryConfig = ?;
-http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing",
-    timeout = 30,
-    retryConfig = {...retryConfig}
-);
+// configurable http:RetryConfig retryConfig = ?;
+// http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing",
+//     timeout = 30,
+//     retryConfig = {...retryConfig}
+// );
 
-type SlackConfig record {|
-    string authToken;
-    string channelName;
-|};
-
-configurable SlackConfig slackConfig = ?;
-
-slack:Client slackClient = check new({
-    auth: {
-        token: slackConfig.authToken
-    }
+analysis:Client sentimentAnalysisClient = check new({
+    timeout: 30
 });
+
+// type SlackConfig record {|
+//     string authToken;
+//     string channelName;
+// |};
+
+// configurable SlackConfig slackConfig = ?;
+
+// slack:Client slackClient = check new({
+//     auth: {
+//         token: slackConfig.authToken
+//     }
+// });
 
 service /social\-media on new http:Listener(9090) {
 
@@ -156,7 +161,8 @@ service /social\-media on new http:Listener(9090) {
             return user;
         }
 
-        Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
+        analysis:Sentiment sentiment = check sentimentAnalysisClient->/api/sentiment.post({text: newPost.description});
+        // Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
         if sentiment.label == "neg" {
             PostForbidden postForbidden = { body: {message: string `id: ${id}`, details: string `users/${id}/posts`, timeStamp: time:utcNow()}};
             return postForbidden;
@@ -166,10 +172,10 @@ service /social\-media on new http:Listener(9090) {
             INSERT INTO posts(description, category, created_date, tags, user_id)
             VALUES (${newPost.description}, ${newPost.category}, CURDATE(), ${newPost.tags}, ${id});`);
 
-        _  = check slackClient->/chat\.postMessage.post({
-            channel: slackConfig.channelName,
-            text: string `User ${user.name} has a new post.`
-          });
+        // _  = check slackClient->/chat\.postMessage.post({
+        //     channel: slackConfig.channelName,
+        //     text: string `User ${user.name} has a new post.`
+        //   });
         return http:CREATED;
     }
 }

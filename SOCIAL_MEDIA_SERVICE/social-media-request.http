@@ -22,11 +22,11 @@ GET http://localhost:9090/social-media/users/2
 GET http://localhost:9090/social-media/users/3/posts
 
 ### Create a post
-POST http://localhost:9090/social-media/users/3/posts
+POST http://localhost:9090/social-media/users/1/posts
 content-type: application/json
 
 {
-    "description": "I don't want to learn Azure",
+    "description": "I want to learn Azure",
     "tags": "azure,cloud,devops",
     "category": "education"
 }

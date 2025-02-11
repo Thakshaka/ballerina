@@ -1,0 +1,5 @@
+[package]
+org = "thakshaka"
+name = "sentiment.analysis"
+version = "0.1.0"
+distribution = "2201.10.3"
