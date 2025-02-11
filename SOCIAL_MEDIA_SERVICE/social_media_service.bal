@@ -5,7 +5,8 @@ import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
 import ballerina/lang.regexp;
 // import ballerinax/slack;
-import balguides/sentiment.analysis;
+// import balguides/sentiment.analysis;
+import ballerina/constraint;
 
 type User record {|
     readonly int id;
@@ -18,8 +19,17 @@ type User record {|
 |};
 
 type NewUser record {|
+
+    @constraint:String {
+        minLength: 2,
+        maxLength: 100
+    }
     string name;
     time:Date birthDate;
+
+    @constraint:String {
+        pattern: re `^(\+94|0)[0-9]{9}`
+    }
     string mobileNumber;
 |};
 
@@ -62,15 +72,29 @@ final mysql:Client socialMediaDb = check initSocialMediaDb();
 
 function initSocialMediaDb() returns mysql:Client|error => check new(...databaseConfig);
 
-// configurable http:RetryConfig retryConfig = ?;
-// http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing",
-//     timeout = 30,
-//     retryConfig = {...retryConfig}
-// );
+configurable http:RetryConfig retryConfig = ?;
+http:Client sentimentEndpoint = check new("https://localhost:9099/text-processing",
+    timeout = 30,
+    retryConfig = {...retryConfig},
+    secureSocket = {
+        cert: "./resources/public.crt"
+    },
+    auth = {
+        tokenUrl: "https://localhost:9445/oauth2/token",
+        clientId: "FlfJYKBD2c925h4lkycqNZlC2l4a",
+        clientSecret: "PJz0UhTJMrHOo68QQNpvnqAY_3Aa",
+        scopes: "admin",
+        clientConfig: {
+            secureSocket: {
+                cert: "./resources/public.crt"
+            }
+        }
+    }
+);
 
-analysis:Client sentimentAnalysisClient = check new({
-    timeout: 30
-});
+// analysis:Client sentimentAnalysisClient = check new({
+//     timeout: 30
+// });
 
 // type SlackConfig record {|
 //     string authToken;
@@ -119,9 +143,9 @@ service /social\-media on new http:Listener(9090) {
             INSERT INTO users (birth_date, name, mobile_number)
             VALUES (${newUser.birthDate}, ${newUser.name}, ${newUser.mobileNumber});`);
 
-            _ = check socialMediaDb->execute(`
-                INSERT INTO followers (birth_date, name, mobile_number)
-                VALUES (${newUser.birthDate}, ${newUser.name}, ${newUser.mobileNumber});`);
+            // _ = check socialMediaDb->execute(`
+            //     INSERT INTO followers (birth_date, name, mobile_number)
+            //     VALUES (${newUser.birthDate}, ${newUser.name}, ${newUser.mobileNumber});`);
 
             if true {
                 check commit;
@@ -161,8 +185,8 @@ service /social\-media on new http:Listener(9090) {
             return user;
         }
 
-        analysis:Sentiment sentiment = check sentimentAnalysisClient->/api/sentiment.post({text: newPost.description});
-        // Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
+        // analysis:Sentiment sentiment = check sentimentAnalysisClient->/api/sentiment.post({text: newPost.description});
+        Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
         if sentiment.label == "neg" {
             PostForbidden postForbidden = { body: {message: string `id: ${id}`, details: string `users/${id}/posts`, timeStamp: time:utcNow()}};
             return postForbidden;
