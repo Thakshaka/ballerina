@@ -57,6 +57,7 @@ type Post record {|
 configurable DatabaseConfig databaseConfig = ?;
 
 mysql:Client socialMediaDb = check new (...databaseConfig);
+http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing");
 
 service /social\-media on new http:Listener(9090) {
 
@@ -120,6 +121,31 @@ service /social\-media on new http:Listener(9090) {
             select post;
         return postToPostWithMeta(check posts);
     }
+
+    resource function post users/[int id]/posts(NewPost newPost) returns http:Created|UserNotFound|PostForbidden|error {
+        User|error user = socialMediaDb->queryRow(`SELECT * FROM users WHERE id = ${id}`);
+        if user is sql:NoRowsError {
+            ErrorDetails errorDetails = buildErrorPayload(string `id: ${id}`, string `users/${id}/posts`);
+            UserNotFound userNotFound = {
+                body: errorDetails
+            };
+            return userNotFound;
+        }
+        if user is error {
+            return user;
+        }
+
+        Sentiment sentiment = check sentimentEndpoint->/api/sentiment.post({text: newPost.description});
+        if sentiment.label == "neg" {
+            PostForbidden postForbidden = { body: {message: string `id: ${id}`, details: string `users/${id}/posts`, timeStamp: time:utcNow()}};
+            return postForbidden;
+        }
+        
+        _ = check socialMediaDb->execute(`
+            INSERT INTO posts(description, category, created_date, tags, user_id)
+            VALUES (${newPost.description}, ${newPost.category}, CURDATE(), ${newPost.tags}, ${id});`);
+        return http:CREATED;
+    }
 }
 
 function buildErrorPayload(string msg, string path) returns ErrorDetails => {
@@ -146,6 +172,17 @@ type PostWithMeta record {
     Meta meta;
 };
 
+public type NewPost record {|
+    string description;
+    string tags;
+    string category;
+|};
+
+type PostForbidden record {|
+    *http:Forbidden;
+    ErrorDetails body;
+|};
+
 function postToPostWithMeta(Post[] post) returns PostWithMeta[] => from var postItem in post
     select {
         id: postItem.id,
@@ -156,3 +193,15 @@ function postToPostWithMeta(Post[] post) returns PostWithMeta[] => from var post
             created_date: postItem.created_date
         }
     };
+
+type Probability record {
+    decimal neg;
+    decimal neutral;
+    decimal pos;
+};
+
+type Sentiment record {
+    Probability probability;
+    string label;
+};
+
