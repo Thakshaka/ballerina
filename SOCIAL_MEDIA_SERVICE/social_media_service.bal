@@ -4,6 +4,7 @@ import ballerina/time;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
 import ballerina/lang.regexp;
+import ballerinax/slack;
 
 type User record {|
     readonly int id;
@@ -65,6 +66,19 @@ http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing
     timeout = 30,
     retryConfig = {...retryConfig}
 );
+
+type SlackConfig record {|
+    string authToken;
+    string channelName;
+|};
+
+configurable SlackConfig slackConfig = ?;
+
+slack:Client slackClient = check new({
+    auth: {
+        token: slackConfig.authToken
+    }
+});
 
 service /social\-media on new http:Listener(9090) {
 
@@ -151,6 +165,11 @@ service /social\-media on new http:Listener(9090) {
         _ = check socialMediaDb->execute(`
             INSERT INTO posts(description, category, created_date, tags, user_id)
             VALUES (${newPost.description}, ${newPost.category}, CURDATE(), ${newPost.tags}, ${id});`);
+
+        _  = check slackClient->/chat\.postMessage.post({
+            channel: slackConfig.channelName,
+            text: string `User ${user.name} has a new post.`
+          });
         return http:CREATED;
     }
 }
