@@ -56,7 +56,9 @@ type Post record {|
 
 configurable DatabaseConfig databaseConfig = ?;
 
-mysql:Client socialMediaDb = check new (...databaseConfig);
+final mysql:Client socialMediaDb = check initSocialMediaDb();
+
+function initSocialMediaDb() returns mysql:Client|error => check new(...databaseConfig);
 
 configurable http:RetryConfig retryConfig = ?;
 http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing",
