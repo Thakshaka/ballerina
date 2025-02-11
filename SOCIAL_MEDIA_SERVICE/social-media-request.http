@@ -4,7 +4,7 @@ content-type: application/json
 
 {
     "birthDate": {
-        "year": 1987,
+        "year": 1987, 
         "month": 02,
         "day": 06
     },

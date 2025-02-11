@@ -1,8 +1,9 @@
 import ballerina/http;
-import ballerina/time;
 import ballerina/sql;
+import ballerina/time;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
+import ballerina/lang.regexp;
 
 type User record {|
     readonly int id;
@@ -21,7 +22,7 @@ type NewUser record {|
 |};
 
 table<User> key(id) users = table [
-    {id:1, name:"Joe", birthDate: {year:1990, month:2, day:3}, mobileNumber:"0718923456"}
+    {id: 1, name: "Joe", birthDate: {year: 1990, month: 2, day: 3}, mobileNumber: "0718923456"}
 ];
 
 type ErrorDetails record {
@@ -43,18 +44,29 @@ type DatabaseConfig record {|
     int port;
 |};
 
+// post representations
+type Post record {|
+    int id;
+    string description;
+    string tags;
+    string category;
+    @sql:Column {name: "created_date"}
+    time:Date created_date;
+|};
+
 configurable DatabaseConfig databaseConfig = ?;
 
-mysql:Client socialMediaDb = check new(...databaseConfig);
+mysql:Client socialMediaDb = check new (...databaseConfig);
 
 service /social\-media on new http:Listener(9090) {
 
     // social-media/users
 
     // get users
-    resource function get users() returns User[]|error{
+    resource function get users() returns User[]|error {
         stream<User, sql:Error?> userStream = socialMediaDb->query(`SELECT * FROM users`);
-        return from var user in userStream select user;
+        return from var user in userStream
+            select user;
     }
 
     // get a user
@@ -85,12 +97,62 @@ service /social\-media on new http:Listener(9090) {
                 VALUES (${newUser.birthDate}, ${newUser.name}, ${newUser.mobileNumber});`);
 
             if true {
-                 check commit;
+                check commit;
             } else {
                 // rollback;
             }
         }
         return http:CREATED;
     }
+
+    resource function get users/[int id]/posts() returns PostWithMeta[]|UserNotFound|error {
+        User|error result = socialMediaDb->queryRow(`SELECT * FROM users WHERE id = ${id}`);
+        if result is sql:NoRowsError {
+            ErrorDetails errorDetails = buildErrorPayload(string `id: ${id}`, string `users/${id}/posts`);
+            UserNotFound userNotFound = {
+                body: errorDetails
+            };
+            return userNotFound;
+        }
+
+        stream<Post, sql:Error?> postStream = socialMediaDb->query(`SELECT id, description, category, created_date, tags FROM posts WHERE user_id = ${id}`);
+        Post[]|error posts = from Post post in postStream
+            select post;
+        return postToPostWithMeta(check posts);
+    }
 }
 
+function buildErrorPayload(string msg, string path) returns ErrorDetails => {
+    message: msg,
+    timeStamp: time:utcNow(),
+    details: string `uri=${path}`
+};
+
+type Created_date record {
+    int year;
+    int month;
+    int day;
+};
+
+type Meta record {
+    string[] tags;
+    string category;
+    Created_date created_date;
+};
+
+type PostWithMeta record {
+    int id;
+    string description;
+    Meta meta;
+};
+
+function postToPostWithMeta(Post[] post) returns PostWithMeta[] => from var postItem in post
+    select {
+        id: postItem.id,
+        description: postItem.description,
+        meta: {
+            tags: regexp:split(re `,`, postItem.tags),
+            category: postItem.category,
+            created_date: postItem.created_date
+        }
+    };
