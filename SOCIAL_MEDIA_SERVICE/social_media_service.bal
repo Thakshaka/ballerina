@@ -57,7 +57,12 @@ type Post record {|
 configurable DatabaseConfig databaseConfig = ?;
 
 mysql:Client socialMediaDb = check new (...databaseConfig);
-http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing");
+
+configurable http:RetryConfig retryConfig = ?;
+http:Client sentimentEndpoint = check new("http://localhost:9099/text-processing",
+    timeout = 30,
+    retryConfig = {...retryConfig}
+);
 
 service /social\-media on new http:Listener(9090) {
 
